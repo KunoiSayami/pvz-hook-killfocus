@@ -83,7 +83,6 @@ LRESULT __stdcall HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
 	return CallNextHookEx(_hook, nCode, wParam, lParam);
 }
 
-LPCSTR szLibPath = "\\Release\\INJECT.dll";
 
 
 void do_hook(DWORD pid) {
@@ -94,22 +93,26 @@ void do_hook(DWORD pid) {
 }
 
 // https://www.codeproject.com/Articles/4610/Three-Ways-to-Inject-Your-Code-into-Another-Proces
-void _do_hook(DWORD pid) {
+void inject_and_hook(DWORD pid) {
 	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 	HANDLE hThread;
 	void* pLibRemote;
 	DWORD hLibModule;
-	HMODULE hKernel32 = LoadLibrary(_T("kernel32")), hInject = LoadLibrary(TEXT("INJECT.dll"));
+	HMODULE hKernel32 = LoadLibrary(_T("kernel32"));//, hInject = LoadLibrary(TEXT("INJECT.dll"));
 	DWORD dWord;
+	LPSTR szCurrentPath = new CHAR[260], szLibPath = new CHAR[300];
+	GetCurrentDirectoryA(260, szCurrentPath);
 	void* addr = (void*)::GetProcAddress(hKernel32, "LoadLibraryA");
+	sprintf(szLibPath, "%s\\Release\\INJECT.dll", szCurrentPath);
 	pLibRemote = VirtualAllocEx(hProcess, NULL, strlen(szLibPath) + 1, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 	WriteProcessMemory(hProcess, pLibRemote, (void*)szLibPath, strlen(szLibPath), NULL);
 	hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE) addr, pLibRemote, 0, &dWord);
 	WaitForSingleObject(hThread, INFINITE);
 	printf("%ld\n", GetExitCodeThread(hThread, &hLibModule));
-	_hook = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)GetProcAddress(hInject, "meconnect"),(HINSTANCE) hLibModule, GuessProcessMainThread(pid));
+	//_hook = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)GetProcAddress(hInject, "meconnect"),(HINSTANCE) hLibModule, GuessProcessMainThread(pid));
 	CloseHandle(hThread);
 	VirtualFreeEx(hProcess, pLibRemote, 0, MEM_RELEASE);
+	delete[] szCurrentPath, delete[] szLibPath;
 	CloseHandle(hProcess);
 }
 
@@ -124,9 +127,9 @@ int main()
 {
 	DWORD process_id = scan_process(_T("popcapgame1.exe"));
 	printf("%ld\n", process_id);
-	do_hook(process_id);
+	inject_and_hook(process_id);
 	//Sleep(50000);
-	signal(SIGINT, signa);
-	while (1) Sleep(1000);
+	//signal(SIGINT, signa);
+	//while (1) Sleep(1000);
 	return 0;
 }

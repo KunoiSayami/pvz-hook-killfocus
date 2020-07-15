@@ -22,4 +22,9 @@
       <Filter>Source File</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="file_location.h">
+      <Filter>Source File</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>
