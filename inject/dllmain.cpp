@@ -101,23 +101,6 @@ std::vector<DWORD>& get_thread_id(std::vector<DWORD>& tids) {
 }
 #endif
 
-DWORD WINAPI thread(LPVOID params) {
-	FILE* file;
-	SYSTEMTIME st;
-	GetLocalTime(&st);
-	fopen_s(&file, DLL_FUNCTION_FILE, "a+");
-	_hook = SetWindowsHookEx(WH_MSGFILTER, HookCallback, NULL, GuessProcessMainThread(GetCurrentProcessId()));
-	std::vector<DWORD> threadPids;
-	if (_hook == NULL)
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %ld.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, GetLastError());
-	else
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d hook started.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-	fclose(file);
-	while (1)
-		Sleep(60000);
-	return 0;
-}
-
 INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
 	/* open file */
 	FILE* file;
@@ -129,7 +112,12 @@ INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
 	case DLL_PROCESS_ATTACH:
 		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 		fprintf(file, "DLL attach function called.\n");
-		CreateThread(NULL, 0, thread, NULL, 0, NULL);
+		//CreateThread(NULL, 0, thread, NULL, 0, NULL);
+		_hook = SetWindowsHookEx(WH_MSGFILTER, HookCallback, NULL, GuessProcessMainThread(GetCurrentProcessId()));
+		if (_hook == NULL)
+			fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %ld.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, GetLastError());
+		else
+			fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d hook started.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 		break;
 	case DLL_PROCESS_DETACH:
 		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
