@@ -1,167 +1,77 @@
-﻿#include <stdio.h>
-#include <windows.h>
-#include <TlHelp32.h>
-#include <vector>
-#include "file_location.h"
-#include <string>
-#include <process.h>
-#include <stdlib.h>
-#include <time.h>
+﻿
+#include <Windows.h>
+#include <stdio.h>
+//
+// some data will be shared across all
+// instances of the DLL
+//
+#pragma comment(linker, "/SECTION:.SHARED,RWS")
+#pragma data_seg(".SHARED")
 
-#ifndef MAKEULONGLONG
-#define MAKEULONGLONG(ldw, hdw) ((ULONGLONG(hdw) << 32) | ((ldw) & 0xFFFFFFFF))
-#endif
+int iKeyCount = 0;
+HHOOK hMsgHook = 0;
 
-#ifndef MAXULONGLONG
-#define MAXULONGLONG ((ULONGLONG)~((ULONGLONG)0))
-#endif
+//
+// instance specific data
+//
+HMODULE hInstance = 0;
 
-#ifndef DLL_LOGDIR
-constexpr auto DLL_FUNCTION_FILE = "function.log";
-constexpr auto DLL_LOG_FILE = "log.log";
-#endif
-
-HHOOK _hook;
-
-DWORD GuessProcessMainThread(DWORD dwProcID)
+//
+// DLL load/unload entry point
+//
+BOOL APIENTRY DllMain(HANDLE hModule,
+    DWORD  dwReason,
+    LPVOID lpReserved)
 {
-	DWORD dwMainThreadID = 0;
-	ULONGLONG ullMinCreateTime = MAXULONGLONG;
+    switch (dwReason)
+    {
+    case DLL_PROCESS_ATTACH:
+        hInstance = (HINSTANCE)hModule;
+        break;
 
-	HANDLE hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-	if (hThreadSnap != INVALID_HANDLE_VALUE) {
-		THREADENTRY32 th32;
-		th32.dwSize = sizeof(THREADENTRY32);
-		BOOL bOK = TRUE;
-		for (bOK = Thread32First(hThreadSnap, &th32); bOK;
-			bOK = Thread32Next(hThreadSnap, &th32)) {
-			if (th32.th32OwnerProcessID == dwProcID) {
-				HANDLE hThread = OpenThread(THREAD_QUERY_INFORMATION,
-					TRUE, th32.th32ThreadID);
-				if (hThread) {
-					FILETIME afTimes[4] = { 0 };
-					if (GetThreadTimes(hThread,
-						&afTimes[0], &afTimes[1], &afTimes[2], &afTimes[3])) {
-						ULONGLONG ullTest = MAKEULONGLONG(afTimes[0].dwLowDateTime,
-							afTimes[0].dwHighDateTime);
-						if (ullTest && ullTest < ullMinCreateTime) {
-							ullMinCreateTime = ullTest;
-							dwMainThreadID = th32.th32ThreadID; // let it be main... :)
-						}
-					}
-					CloseHandle(hThread);
-				}
-			}
-		}
-		CloseHandle(hThreadSnap);
-	}
+    case DLL_THREAD_ATTACH:
+        break;
 
-	//if (dwMainThreadID) {
-	//	//PostThreadMessage(dwMainThreadID, WM_QUIT, 0, 0); // close your eyes...
-	//}
+    case DLL_THREAD_DETACH:
+        break;
 
-	return dwMainThreadID;
+    case DLL_PROCESS_DETACH:
+        break;
+    }
+    return TRUE;
 }
 
-//extern "C" __declspec(dllexport)
-LRESULT __stdcall HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
+extern "C" __declspec(dllexport)
+LRESULT CALLBACK MsgProc(int code,
+    WPARAM wParam,
+    LPARAM lParam)
 {
-	FILE* file;
-	SYSTEMTIME st;
-	GetLocalTime(&st);
-	MSG* ptr = (MSG*)lParam;
-	fopen_s(&file, DLL_FUNCTION_FILE, "a+");
-	fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, ptr->message == WM_KILLFOCUS);
-	//printf("%d", ptr->message == WM_KILLFOCUS);
-	fclose(file);
-	if (nCode >= 0)
-	{
-
-	}
-
-	// call the next hook in the hook chain. This is nessecary or your hook chain will break and the hook stops
-	return CallNextHookEx(_hook, nCode, wParam, lParam);
+    MSG* ptr = (MSG*)lParam;
+    FILE* fp;
+    fopen_s(&fp, "log.log", "a+");
+    fprintf(fp, "call hook\n");
+    fclose(fp);
+    return CallNextHookEx(hMsgHook, code, wParam, lParam);
 }
 
-#if 0
-#ifdef UNICODE
-typedef std::wstring tstring;
-#else
-typedef std::string tstring;
-#endif
-
-std::vector<DWORD>& get_thread_id(std::vector<DWORD>& tids) {
-	HANDLE hdSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, GetCurrentProcessId());
-	THREADENTRY32 te32;
-	te32.dwSize = sizeof(te32);
-	if (Thread32First(hdSnap, &te32)) {
-		do {
-			if (tstring(te32.))
-		}
-	}
-	return tids;
-}
-#endif
-
-DWORD WINAPI custom_thread(LPVOID prarms) {
-	FILE* file;
-	SYSTEMTIME st;
-	GetLocalTime(&st);
-	fopen_s(&file, DLL_LOG_FILE, "a+");
-	_hook = SetWindowsHookEx(WH_MSGFILTER, HookCallback, NULL, GuessProcessMainThread(GetCurrentProcessId()));
-	if (_hook == NULL)
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %ld.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, GetLastError());
-	else
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d hook started.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-	fclose(file);
-	while (1) {
-		Sleep(10000);
-	}
-	return 0;
+//
+// install hooks
+//
+extern "C" __declspec(dllexport)
+void InstallHooks()
+{
+    //hKeyboardHook = SetWindowsHookEx(WH_KEYBOARD, KeyboardProc, hInstance, 0);
+    hMsgHook = SetWindowsHookEx(WH_MSGFILTER, MsgProc, hInstance, 0);
 }
 
-INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
-	srand(time(NULL));
-	/* open file */
-	FILE* file;
-	SYSTEMTIME st;
-	GetLocalTime(&st);
-	fopen_s(&file, DLL_LOG_FILE, "a+");
-	int randnum = rand();
-
-	switch (Reason) {
-	case DLL_PROCESS_ATTACH:
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
-		fprintf(file, "DLL attach function called.\n");
-		//CreateThread(NULL, 0, thread, NULL, 0, NULL);
-		_beginthreadex(NULL, 0, (_beginthreadex_proc_type)custom_thread, NULL, 0, NULL);
-		break;
-	case DLL_PROCESS_DETACH:
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
-		fprintf(file, "DLL detach function called.\n");
-		break;
-	case DLL_THREAD_ATTACH:
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
-		fprintf(file, "DLL thread attach function called.\n");
-		break;
-	case DLL_THREAD_DETACH:
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
-		fprintf(file, "DLL thread detach function called.\n");
-		break;
-	}
-	/* close file */
-	fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d Reach function end\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
-	fclose(file);
-	return TRUE;
+//
+// remov hooks
+//
+extern "C" __declspec(dllexport)
+void RemoveHooks()
+{
+    //UnhookWindowsHookEx(hKeyboardHook);
+    UnhookWindowsHookEx(hMsgHook);
+    hMsgHook = 0;
 }
 
-extern "C" __declspec(dllexport) int meconnect(int code, WPARAM wParam, LPARAM lParam) {
-	FILE* file;
-	SYSTEMTIME st;
-	GetLocalTime(&st);
-	MSG* ptr = (MSG*)lParam;
-	fopen_s(&file, "function.txt", "a+");
-	fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, ptr->message == WM_KILLFOCUS);
-	fclose(file);
-	return(CallNextHookEx(NULL, code, wParam, lParam));
-}
