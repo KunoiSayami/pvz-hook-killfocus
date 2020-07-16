@@ -4,7 +4,9 @@
 #include <vector>
 #include "file_location.h"
 #include <string>
-
+#include <process.h>
+#include <stdlib.h>
+#include <time.h>
 
 #ifndef MAKEULONGLONG
 #define MAKEULONGLONG(ldw, hdw) ((ULONGLONG(hdw) << 32) | ((ldw) & 0xFFFFFFFF))
@@ -101,38 +103,54 @@ std::vector<DWORD>& get_thread_id(std::vector<DWORD>& tids) {
 }
 #endif
 
+DWORD WINAPI custom_thread(LPVOID prarms) {
+	FILE* file;
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	fopen_s(&file, DLL_LOG_FILE, "a+");
+	_hook = SetWindowsHookEx(WH_MSGFILTER, HookCallback, NULL, GuessProcessMainThread(GetCurrentProcessId()));
+	if (_hook == NULL)
+		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %ld.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, GetLastError());
+	else
+		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d hook started.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+	fclose(file);
+	while (1) {
+		Sleep(10000);
+	}
+	return 0;
+}
+
 INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved) {
+	srand(time(NULL));
 	/* open file */
 	FILE* file;
 	SYSTEMTIME st;
 	GetLocalTime(&st);
 	fopen_s(&file, DLL_LOG_FILE, "a+");
+	int randnum = rand();
 
 	switch (Reason) {
 	case DLL_PROCESS_ATTACH:
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
 		fprintf(file, "DLL attach function called.\n");
 		//CreateThread(NULL, 0, thread, NULL, 0, NULL);
-		_hook = SetWindowsHookEx(WH_MSGFILTER, HookCallback, NULL, GuessProcessMainThread(GetCurrentProcessId()));
-		if (_hook == NULL)
-			fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %ld.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, GetLastError());
-		else
-			fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d hook started.\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+		_beginthreadex(NULL, 0, (_beginthreadex_proc_type)custom_thread, NULL, 0, NULL);
 		break;
 	case DLL_PROCESS_DETACH:
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
 		fprintf(file, "DLL detach function called.\n");
 		break;
 	case DLL_THREAD_ATTACH:
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
 		fprintf(file, "DLL thread attach function called.\n");
 		break;
 	case DLL_THREAD_DETACH:
-		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+		fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d ", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
 		fprintf(file, "DLL thread detach function called.\n");
 		break;
 	}
 	/* close file */
+	fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %d Reach function end\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, randnum);
 	fclose(file);
 	return TRUE;
 }
