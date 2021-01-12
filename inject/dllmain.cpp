@@ -46,11 +46,15 @@ LRESULT CALLBACK MsgProc(int code,
     WPARAM wParam,
     LPARAM lParam)
 {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
     MSG* ptr = (MSG*)lParam;
     FILE* fp;
     fopen_s(&fp, "log.log", "a+");
-    fprintf(fp, "call hook\n");
-    fclose(fp);
+    if (fp != nullptr) {
+        fprintf(fp, "[%d-%02d-%02d %02d:%02d:%02d]call hook\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+        fclose(fp);
+    }
     return CallNextHookEx(hMsgHook, code, wParam, lParam);
 }
 

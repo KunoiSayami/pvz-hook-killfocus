@@ -28,10 +28,12 @@ DWORD scan_process(LPCTSTR process_name) {
 void do_hook(DWORD pid) {
 	//hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 	hModule = LoadLibrary(_T("INJECT.dll"));
-	cleanFunction = GetProcAddress(hModule, "RemoveHooks");
-	GetProcAddress(hModule, "InstallHooks")();
-	//_hook = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)GetProcAddress(hModule, "InstallHooks"), hModule, 0);
-	printf("%ld\n", GetLastError());
+	if (hModule != nullptr) {
+		cleanFunction = GetProcAddress(hModule, "RemoveHooks");
+		GetProcAddress(hModule, "InstallHooks")();
+		//_hook = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)GetProcAddress(hModule, "InstallHooks"), hModule, 0);
+		printf("Install hooks returns %ld\n", GetLastError());
+	}
 }
 
 // https://www.codeproject.com/Articles/4610/Three-Ways-to-Inject-Your-Code-into-Another-Proces
@@ -47,13 +49,20 @@ void inject_and_hook(DWORD pid) {
 	void* addr = (void*)::GetProcAddress(hKernel32, "LoadLibraryA");
 	sprintf(szLibPath, "%s\\Release\\INJECT.dll", szCurrentPath);
 	pLibRemote = VirtualAllocEx(hProcess, NULL, strlen(szLibPath) + 1, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-	WriteProcessMemory(hProcess, pLibRemote, (void*)szLibPath, strlen(szLibPath), NULL);
-	hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE) addr, pLibRemote, 0, &dWord);
-	WaitForSingleObject(hThread, INFINITE);
-	printf("%ld\n", GetExitCodeThread(hThread, &hLibModule));
-	//_hook = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)GetProcAddress(hInject, "meconnect"),(HINSTANCE) hLibModule, GuessProcessMainThread(pid));
-	CloseHandle(hThread);
-	VirtualFreeEx(hProcess, pLibRemote, 0, MEM_RELEASE);
+	if (pLibRemote != nullptr) {
+		WriteProcessMemory(hProcess, pLibRemote, (void*)szLibPath, strlen(szLibPath), NULL);
+		hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)addr, pLibRemote, 0, &dWord);
+		if (hThread != nullptr) {
+			WaitForSingleObject(hThread, INFINITE);
+			printf("Get exit code thread: %ld\n", GetExitCodeThread(hThread, &hLibModule));
+			//_hook = SetWindowsHookEx(WH_MSGFILTER, (HOOKPROC)GetProcAddress(hInject, "meconnect"),(HINSTANCE) hLibModule, GuessProcessMainThread(pid));
+			CloseHandle(hThread);
+		}
+		VirtualFreeEx(hProcess, pLibRemote, 0, MEM_RELEASE);
+	}
+	else {
+		printf("Get remove library error");
+	}
 	delete[] szCurrentPath, delete[] szLibPath;
 	CloseHandle(hProcess);
 }
@@ -62,18 +71,19 @@ void inject_and_hook(DWORD pid) {
 void signa(int) {
 	//UnhookWindowsHookEx(_hook);
 	//CloseHandle(hProcess);
-	cleanFunction();
-	FreeLibrary(hModule);
+	//cleanFunction();
+	//FreeLibrary(hModule);
 	exit(0);
 }
 
 int main()
 {
 	DWORD process_id = scan_process(_T("popcapgame1.exe"));
-	printf("%ld\n", process_id);
+	printf("Process ID: %ld\n", process_id);
 	do_hook(process_id);
 	//Sleep(50000);
-	//signal(SIGINT, signa);
-	while (1) Sleep(1000);
+	signal(SIGINT, signa);
+	while (1)
+		Sleep(1000);
 	return 0;
 }
